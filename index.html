@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,6 +19,8 @@
     height: 100%;
     overflow: hidden;
     user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
   }
   #stage {
     position: fixed;
@@ -39,23 +41,13 @@
     width: 100%;
     max-width: 720px;
     max-height: 100%;
-    overflow: auto;
-    font-size: 9px;
-    line-height: 1.15;
+    overflow: hidden;
+    font-size: 10px;
+    line-height: 1.3;
     white-space: pre;
-    color: #c9d1d9;
+    color: #8b949e;
   }
-  .term::-webkit-scrollbar { display: none; }
   .term .line { min-height: 1em; }
-  .cursor {
-    display: inline-block;
-    width: 6px;
-    height: 11px;
-    background: #c9d1d9;
-    animation: blink 1s steps(1) infinite;
-    vertical-align: middle;
-  }
-  @keyframes blink { 50% { opacity: 0; } }
 
   .mini-term {
     position: fixed;
@@ -71,8 +63,9 @@
     overflow: hidden;
     opacity: 0;
     transform: scale(0.85);
-    transition: opacity .18s ease, transform .18s ease;
+    transition: opacity .15s ease, transform .15s ease;
     z-index: 10;
+    pointer-events: none; /* لمس روش اثری نداره */
   }
   .mini-term.show { opacity: 1; transform: scale(1); }
   .mini-term .bar {
@@ -81,17 +74,9 @@
     border-bottom: 1px solid #30363d;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 0 6px;
     font-size: 9px;
     color: #8b949e;
-  }
-  .mini-term .bar .x {
-    cursor: pointer;
-    color: #f85149;
-    font-weight: bold;
-    padding: 0 6px;
-    font-size: 12px;
   }
   .mini-term .body { padding: 6px; }
   .mini-term .prompt { color: #58a6ff; }
@@ -105,101 +90,63 @@
 <body>
 
 <div id="stage">
-  <div class="term" id="mainTerm"></div>
+  <div class="term" id="mainTerm">
+    <div class="line" style="color:#58a6ff;">> INITIALIZING...</div>
+  </div>
 </div>
 <div id="minis"></div>
 
 <script>
 (function(){
-  // جلوگیری از زوم دو انگشتی
+  // ---------- جلوگیری از زوم و منوی راست‌کلیک ----------
   document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('dblclick', e => e.preventDefault());
+  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
-  const art = [
-    "",
-    "   +==============================================+",
-    "   |                                              |",
-    "   |   ####    ###   ####   ####   #   #          |",
-    "   |   #   #  #   #  #   #  #   #   # #           |",
-    "   |   ####   #####  ####   ####     #            |",
-    "   |   #   #  #   #  #   #  #   #    #            |",
-    "   |   #   #  #   #  #   #  #   #    #            |",
-    "   |   ####   #   #  ####   ####     #            |",
-    "   |                                              |",
-    "   +==============================================+",
-    "",
-    "      ............................................",
-    "    ..::::::::::::::::::::::::::::::::::::::::::::..",
-    "   .::::::::::::::::::::::::::::::::::::::::::::::..",
-    "   .::##############################################::.",
-    "   .::#  ########################################  #::.",
-    "   .::#  ##  ##################################  ##  #::.",
-    "   .::#  ##  ##  ##########################  ##  ##  #::.",
-    "   .::#  ##  ##  ##   ##################   ##  ##  ##  #::.",
-    "   .::#  ##  ##  ##   ##   ##########   ##   ##  ##  ##  #::.",
-    "   .::#  ##  ##  ##   ##   ##  ####  ##   ##   ##  ##  ##  #::.",
-    "   .::#  ##  ##  ##   ##   ##  ##  ##   ##   ##  ##  ##  ##  #::.",
-    "   .::#  ##  ##  ##   ##   ##  ##  ##   ##   ##  ##  ##  ##  #::.",
-    "   .::#  ##  ##  ##   ##   ##########   ##   ##  ##  ##  ##  #::.",
-    "   .::#  ##  ##  ##   ##################   ##   ##  ##  ##  #::.",
-    "   .::#  ##  ##  ##########################   ##  ##  ##  #::.",
-    "   .::#  ##  ##################################  ##  #::.",
-    "   .::#  ########################################  #::.",
-    "   .::##############################################::.",
-    "    ..::::::::::::::::::::::::::::::::::::::::::::..",
-    "      ............................................",
-    "",
-    "   +==============================================+",
-    "   |  [!!] WARNING: SYSTEM CORRUPTED [!!]         |",
-    "   |  [>>] FILE: clown.exe                        |",
-    "   |  [>>] STATUS: INFECTED                       |",
-    "   |  [>>] USER: UNKNOWN                          |",
-    "   |  [>>] PRESS ANY KEY TO CONTINUE...           |",
-    "   +==============================================+",
-    ""
-  ];
+  // ---------- جلوگیری از دکمه Back مرورگر ----------
+  history.pushState(null, '', location.href);
+  window.addEventListener('popstate', function(){
+    history.pushState(null, '', location.href);
+  });
 
   const term = document.getElementById('mainTerm');
-  let lineIdx = 0;
+  const container = document.getElementById('minis');
 
-  function printNextLine(){
-    if (lineIdx >= art.length) { startCountdown(); return; }
-    const div = document.createElement('div');
-    div.className = 'line';
-    div.textContent = art[lineIdx];
-    term.appendChild(div);
-    term.scrollTop = term.scrollHeight;
-    lineIdx++;
-    setTimeout(printNextLine, 55);
-  }
+  // ---------- تعداد پنجره‌ها ----------
+  const TOTAL = 30;        // کل پنجره‌ها (۱ اصلی + بقیه)
+  const INTERVAL = 180;    // سرعت باز شدن (میلی‌ثانیه) - کمتر = سریع‌تر
 
-  function startCountdown(){
-    let sec = 5;
-    const div = document.createElement('div');
-    div.className = 'line';
-    div.style.color = '#58a6ff';
-    term.appendChild(div);
-    const cursor = document.createElement('span');
-    cursor.className = 'cursor';
-    term.appendChild(cursor);
-
-    function tick(){
-      div.textContent = `> SYSTEM LOCKED. CONTINUING IN ${sec}...`;
-      if (sec <= 0) { cursor.remove(); spawnMinis(); return; }
-      sec--;
-      setTimeout(tick, 1000);
-    }
-    tick();
-  }
-
-  const TOTAL = 10;
   const minis = [];
+  let spawned = 0;
 
+  // ---------- نمایش متن‌های خالی داخل پنجره اصلی (بدون شکل) ----------
+  const lines = [
+    "> STARTING SYSTEM...",
+    "> LOADING MODULES...",
+    "> [OK] NETWORK",
+    "> [OK] DATABASE",
+    "> [OK] SECURITY",
+    "> SYSTEM CORRUPTED [!!]",
+    "> OPENING TERMINALS..."
+  ];
+  lines.forEach((t, i) => {
+    setTimeout(() => {
+      const d = document.createElement('div');
+      d.className = 'line';
+      d.style.color = (t.includes('CORRUPTED') ? '#f85149' : '#8b949e');
+      d.textContent = t;
+      term.appendChild(d);
+    }, i * 120);
+  });
+
+  // ---------- باز کردن پنجره‌ها بلافاصله ----------
   function spawnMinis(){
-    const container = document.getElementById('minis');
     let i = 0;
     const timer = setInterval(() => {
       if (i >= TOTAL - 1) { clearInterval(timer); return; }
       i++;
+
       const w = window.innerWidth;
       const h = window.innerHeight;
       const ww = w * 0.68;
@@ -214,42 +161,41 @@
       el.style.left = x + 'px';
       el.style.top = y + 'px';
       el.innerHTML = `
-        <div class="bar">
-          <span>Terminal ${i+1}</span>
-          <span class="x">✕</span>
-        </div>
+        <div class="bar"><span>Terminal ${i+1}</span></div>
         <div class="body">
           <div><span class="prompt">C:\\&gt;</span> _</div>
         </div>
       `;
-      el.querySelector('.x').addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeAll();
-      });
       container.appendChild(el);
       minis.push(el);
       requestAnimationFrame(() => el.classList.add('show'));
-    }, 300);
+      spawned++;
+    }, INTERVAL);
   }
 
-  function closeAll(){
-    minis.forEach(m => { m.style.opacity = '0'; m.style.transform = 'scale(0.8)'; });
-    setTimeout(() => {
-      minis.forEach(m => m.remove());
-      minis.length = 0;
-      term.innerHTML = '';
-      lineIdx = 0;
-      printNextLine();
-    }, 250);
-  }
+  // شروع بلافاصله بعد از ۳۰۰ms (که متن‌های اولیه ظاهر بشن)
+  setTimeout(spawnMinis, 300);
 
-  document.getElementById('stage').addEventListener('click', () => {
-    if (minis.length > 0) closeAll();
-  });
+  // ---------- راه خروج مخفی: سه بار لمس گوشه بالا-چپ ----------
+  let tapCount = 0;
+  let tapTimer = null;
+  document.addEventListener('touchstart', function(e){
+    const t = e.touches[0];
+    if (t.clientX < 60 && t.clientY < 60) {
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => { tapCount = 0; }, 800);
+      if (tapCount >= 3) {
+        tapCount = 0;
+        // خروج کامل
+        minis.forEach(m => m.remove());
+        minis.length = 0;
+        document.body.innerHTML = '<div style="color:#0f0;font-family:monospace;padding:20px;text-align:center;margin-top:40vh;font-size:16px;">EXIT OK ✅</div>';
+      }
+    }
+  }, { passive: true });
 
-  printNextLine();
-
-  // ثبت Service Worker برای PWA
+  // ---------- ثبت Service Worker ----------
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
